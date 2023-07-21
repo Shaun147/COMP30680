@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Senators</title>
+    <link rel="stylesheet" type="text/css" href="style.css">
+  </head>
+
+  <body>
+    <h1>Information of senators</h1>
+    <h2>Total number of senators</h2>
+    <div id="total_number"></div>
+    <h2>Senators with leadership roles</h2>
+    <div id="leadership"></div>
+    <h2>All senators with detailed information</h2>
+    <div id="filter-boxes" class="filter-box"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Party</th>
+          <th>State</th>
+          <th>Gender</th>
+          <th>Rank</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="senator_table"></tbody>
+    </table>
+
+    <script>
+      var parsedObj;
+      const xmlhttp = new XMLHttpRequest();
+      const url = "senators.json";
+
+      const checkedMap = {
+        Party: [],
+        State: [],
+        Rank: [],
+      };
+
+      xmlhttp.onreadystatechange = function () {
+        if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
+          // Parse the JSON data to a JavaScript variable
+          parsedObj = JSON.parse(xmlhttp.responseText);
+
+          // This function is defined below and deals with the JSON data parsed from the file.
+          countTotalNumber();
+          leadership();
+          display_senators();
+          renderCheckbox();
+        }
+      };
+      xmlhttp.open("GET", url, true);
+      xmlhttp.send();
+  
+      // Count the number of senators in each party
+      function countTotalNumber() {
+        const objects = parsedObj.objects;
+        var RepublicanCount = 0;
+        var DemocratCount = 0;
+        for (var i = 0; i < objects.length; i++) {
+          if (objects[i].party == "Republican") {
+            RepublicanCount++;
+          }
+
+          if (objects[i].party == "Democrat") {
+            DemocratCount++;
+          }
+        }
+
+        const RepublicanTextElement = document.createElement("div");
+        const DemocratTextElement = document.createElement("div");
+        RepublicanTextElement.innerText = "Republican: " + RepublicanCount;
+        DemocratTextElement.innerText = "Democrat: " + DemocratCount;
+        document.getElementById("total_number").append(RepublicanTextElement, DemocratTextElement);
+      }
+      // Display leadership
+      function leadership() {
+        var objects = parsedObj.objects;
+        var text = "";
+        for (var i = 0; i < objects.length; i++) {
+          if (objects[i].leadership_title != null && objects[i].party == "Democrat") {
+            text += objects[i].leadership_title;
+            text = text + ": " + objects[i].person.firstname + " " + objects[i].person.lastname;
+            text = text + " (" + objects[i].party + ")\n";
+          }
+        }
+        for (var i = 0; i < objects.length; i++) {
+          if (objects[i].leadership_title != null && objects[i].party == "Republican") {
+            text += objects[i].leadership_title;
+            text = text + ": " + objects[i].person.firstname + " " + objects[i].person.lastname;
+            text = text + " (" + objects[i].party + ")\n";
+          }
+        }
+        document.getElementById("leadership").innerText = text;
+      }
+      // Display senators
+      function display_senators() {
+        var objects = parsedObj.objects;
+        var fragment = document.createDocumentFragment();
+        // Function is used to append each row
+        function appendRowHelper(tr, data) {
+          var tableData = document.createElement("td");
+          tableData.innerHTML = data;
+          row.appendChild(tableData);
+        }
+        // Append each row
+        for (var i = 0; i < objects.length; i++) {
+          const { person, party, state, senator_rank_label, extra, startdate, website } = objects[i];
+          // Map records the status of the checkbox, show all or check other options
+          const partyFilter = checkedMap.Party.length === 0 || checkedMap.Party.includes(party);
+          const stateFilter = checkedMap.State.length === 0 || checkedMap.State.includes(state);
+          const rankFilter = checkedMap.Rank.length === 0 || checkedMap.Rank.includes(senator_rank_label);
+          // Determine whether to display a senator
+          if (partyFilter && stateFilter && rankFilter) {
+            var row = document.createElement("tr");
+            appendRowHelper(row, person.firstname + " " + person.lastname);
+            appendRowHelper(row, party);
+            appendRowHelper(row, state);
+            appendRowHelper(row, person.gender);
+            appendRowHelper(row, senator_rank_label);
+            // Handle detail information of senators
+            appendRowHelper(row, `<button onclick="handleShowDetail('${person.osid}');">Show Detail</button>`);
+            const expandDetail = document.createElement("tr");
+            expandDetail.style.display = "none";
+            expandDetail.setAttribute("id", person.osid);
+            expandDetail.innerHTML = 
+            `<td colspan="6">
+              <ul>
+                <li>Office: ${extra.office}</li>
+                <li>Date of Birth: ${person.birthday}</li>
+                <li>Start date: ${startdate}</li>
+                 ${person.twitterid ? `<li>Twitter id: ${person.twitterid}</li>` : ""}
+                 ${person.youtubeid ? `<li>Youtube id: ${person.youtubeid}</li>` : ""}
+                <li>Website: <a href="${website}" target="_blank"> ${website} </li>
+              </ul>
+             </td>`;
+            fragment.append(row, expandDetail);
+          }
+        }
+        const senatorTable = document.getElementById("senator_table");
+        senatorTable.innerHTML = "";
+        senatorTable.appendChild(fragment);
+      }
+      // Function renders elements as checkboxes extracting from Json
+      function renderCheckbox() {
+        const filterBox = document.getElementById("filter-boxes");
+        filterBox.innerHTML = "";
+        var objects = parsedObj.objects;
+        const map = {
+          Party: new Set(),
+          State: new Set(),
+          Rank: new Set(),
+        };
+        for (var i = 0; i < objects.length; i++) {
+          var o = objects[i];
+          map.Party.add(o.party);
+          map.State.add(o.state);
+          map.Rank.add(o.senator_rank_label);
+        }
+        // A helper to create checkboxes using input HTML elements acording to the parameters passed in 
+        function createCheckbox(id, value, name, fragment, checked, disabled, listener) {
+          const label = document.createElement("label");
+          label.setAttribute("for", id);
+          label.innerText = name;
+          const input = document.createElement("input");
+          input.setAttribute("type", "checkbox");
+          input.setAttribute("id", id);
+          // input.setAttribute("name", "filterBox");
+          input.setAttribute("value", value);
+          checked ? input.setAttribute("checked", "") : input.removeAttribute("checked");
+          disabled ? input.setAttribute("disabled", "") : input.removeAttribute("disabled");
+          fragment.append(label, input);
+          listener && input.addEventListener("click", listener);
+        }
+
+        // Render all checkboxes according to information Map recorded
+        for (const k in map) {
+          const div = document.createElement("div");
+          div.classList.add("checkbox-group");
+          const fragment = document.createDocumentFragment();
+
+          const strong = document.createElement("strong");
+          strong.innerText = k + ": ";
+          fragment.append(strong);
+
+          // Check if "show all" checkbox is selected
+          let isShowAll = checkedMap[k].length === 0;
+
+          // Create default checkboxes and show all
+          createCheckbox(k + "-default", k + "-default", "Show All", fragment, isShowAll, isShowAll, function () {
+            checkedMap[k] = [];
+            renderCheckbox();
+            display_senators();
+          });
+          map[k].forEach((element) => {
+            let checked = false;
+            for (const c in checkedMap) {
+              if (checkedMap[c].includes(element)) {
+                checked = true;
+                break;
+              }
+            }
+            createCheckbox(element, element, element, fragment, checked, false, function (event) {
+              const group = k;
+              const value = event.target.value;
+              handleClickCheckBox(event, group, value);
+            });
+          });
+
+          div.appendChild(fragment);
+          filterBox.appendChild(div);
+        }
+      }
+      // Handle "click" and "display" features of checkboxes
+      function handleClickCheckBox(event, group, value) {
+        if (event.target.checked) {
+          checkedMap[group].push(value);
+        } else {
+          checkedMap[group] = checkedMap[group].filter((v) => v !== value);
+        }
+
+        renderCheckbox();
+        display_senators();
+      }
+      // Handle features of "showdetail" button
+      function handleShowDetail(id) {
+        const display = document.getElementById(id).style.display;
+        document.getElementById(id).style.display = display === "none" ? "" : "none";
+      }
+    </script>
+  </body>
+</html>
